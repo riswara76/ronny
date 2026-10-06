@@ -1,5 +1,7 @@
 # DCU Active — Staging Setup (what you need to create)
 
+> Indonesian step-by-step version for the chosen setup (own domain + Resend + Netlify): `PANDUAN-STAGING-ID.md`.
+
 Staging runs entirely from **GitHub Actions** (`.github/workflows/staging.yml`).
 
 - The build container used for development cannot reach Supabase or Netlify (network policy). GitHub's runners can.
@@ -90,7 +92,7 @@ After it is created, collect these values:
 ## 6. GitHub permissions
 
 - **Settings → Environments → New environment `staging`** → add all the secrets above.
-- The Claude GitHub App needs **Workflows: read & write** permission to push the workflow files (GitHub → Settings → Applications → Claude → Configure). If the push of `.github/workflows/*` was refused, this is why.
+- Workflow files are already on the branch (CI runs), so no extra GitHub App permission is needed.
 
 ## 7. Run it
 
