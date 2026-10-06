@@ -1,0 +1,129 @@
+name: Staging deploy + verification
+
+# Manual: Actions → "Staging deploy + verification" → Run workflow.
+# All credentials come from the "staging" GitHub Environment secrets (see docs/phase-4/STAGING-SETUP.md).
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy database + Auth config + web before testing
+        type: boolean
+        default: true
+      concurrency_iterations:
+        description: Iterations per mode for the concurrency regression
+        default: '50'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 90
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: ${{ secrets.STAGING_PROJECT_REF }}
+      SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
+      SUPABASE_DB_URL: ${{ secrets.STAGING_DB_URL }}
+      STAGING_SITE_URL: ${{ secrets.STAGING_SITE_URL }}
+      TEST_MAILBOX: ${{ secrets.TEST_MAILBOX }}
+      TEST_IMAP_HOST: ${{ secrets.TEST_IMAP_HOST }}
+      TEST_IMAP_PORT: ${{ secrets.TEST_IMAP_PORT }}
+      TEST_IMAP_USER: ${{ secrets.TEST_IMAP_USER }}
+      TEST_IMAP_PASS: ${{ secrets.TEST_IMAP_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Migrate hosted database
+        if: inputs.deploy
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --yes
+
+      - name: Push Auth config (exact staging origin, SMTP, OTP templates, password policy)
+        if: inputs.deploy
+        env:
+          SITE_URL: ${{ secrets.STAGING_SITE_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_ADMIN_EMAIL: ${{ secrets.SMTP_ADMIN_EMAIL }}
+          SMTP_SENDER_NAME: ${{ secrets.SMTP_SENDER_NAME }}
+        run: |
+          WORK="$(scripts/staging/render-config.sh)"
+          supabase config push --workdir "$WORK" --project-ref "$PROJECT_REF" --yes
+
+      - name: Build web for staging
+        working-directory: web
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy web to Netlify (HTTPS)
+        if: inputs.deploy
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: npx --yes netlify-cli@17 deploy --dir web/dist --prod --site "$NETLIFY_SITE_ID" --auth "$NETLIFY_AUTH_TOKEN" --message "staging ${GITHUB_SHA::7}"
+
+      - name: Test accounts (idempotent)
+        env:
+          DCU_ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+          DCU_USER1_EMAIL: ${{ secrets.STAGING_USER1_EMAIL }}
+          DCU_USER2_EMAIL: ${{ secrets.STAGING_USER2_EMAIL }}
+          DCU_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+        run: node scripts/create-test-users.mjs | sed -E 's/password: .*/password: (hidden)/'
+
+      - name: Playwright Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Complete automated suite against staging
+        env:
+          CONCURRENCY_ITERATIONS: ${{ inputs.concurrency_iterations }}
+          OUT_DIR: ${{ github.workspace }}/evidence
+        run: ./scripts/staging/run-staging-tests.sh
+
+      - name: Supabase Security + Performance Advisor (Management API)
+        if: always()
+        run: |
+          mkdir -p evidence
+          for kind in security performance; do
+            curl -sSf -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/advisors/$kind" -o "evidence/advisors-$kind.json" || echo "advisor API ($kind) unavailable"
+          done
+
+      - name: Lighthouse on staging
+        if: always()
+        working-directory: web
+        env:
+          LH_BASE_URL: ${{ secrets.STAGING_SITE_URL }}
+          LH_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+          LH_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+          LH_OUT: ${{ github.workspace }}/evidence/lighthouse
+        run: node scripts/lighthouse.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-evidence
+          path: |
+            evidence/
+            web/test-results/
+          retention-days: 30

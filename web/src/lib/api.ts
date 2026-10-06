@@ -45,8 +45,9 @@ export const checkIn = (id: string) => rpc<Booking>('check_in', { p_booking_id: 
 export const getMyBookings = (scope: 'UPCOMING' | 'HISTORY') => rpc<Booking[]>('get_my_bookings', { p_scope: scope, p_limit: 100 });
 export const getBooking = (id: string) => rpc<Booking>('get_booking', { p_booking_id: id });
 
-export async function getMyProfile(): Promise<Profile> {
-  const { data, error } = await supabase.from('profiles').select('id, full_name, email, role, is_active').single();
+// Always filter by id: for admins RLS returns every profile, so an unfiltered .single() would fail.
+export async function getMyProfile(userId: string): Promise<Profile> {
+  const { data, error } = await supabase.from('profiles').select('id, full_name, email, role, is_active').eq('id', userId).single();
   if (error) throw toAppError(error);
   return data as Profile;
 }

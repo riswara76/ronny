@@ -1,0 +1,97 @@
+{
+  "iterations_per_mode": 100,
+  "summary": [
+    {
+      "scenario": "tennis_2_users",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "A wins": 130,
+        "B wins": 70
+      },
+      "barrier_min_waiting": 2,
+      "violations": 0
+    },
+    {
+      "scenario": "air_hockey_3_users_2_tables",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "loser=s2c": 90,
+        "loser=s2b": 68,
+        "loser=s2a": 42
+      },
+      "barrier_min_waiting": 3,
+      "violations": 0
+    },
+    {
+      "scenario": "foosball_3_users_2_tables",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "loser=s3c": 68,
+        "loser=s3b": 86,
+        "loser=s3a": 46
+      },
+      "barrier_min_waiting": 3,
+      "violations": 0
+    },
+    {
+      "scenario": "same_user_overlap",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "winners=foosball+tabletennis": 95,
+        "winners=tennis+tabletennis": 105
+      },
+      "barrier_min_waiting": 3,
+      "violations": 0
+    },
+    {
+      "scenario": "booking_vs_admin_block",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "booking first, block refused (conflict)": 65,
+        "booking first, then block cancelled it": 71,
+        "block first, booking refused": 64
+      },
+      "barrier_min_waiting": 2,
+      "violations": 0
+    },
+    {
+      "scenario": "cancel_vs_rebook_race",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "rebook won after cancel committed": 87,
+        "rebook saw slot still held, retry succeeded": 113
+      },
+      "barrier_min_waiting": null,
+      "violations": 0
+    },
+    {
+      "scenario": "mixed_duration_overlap",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "winners=18:30/60,19:30/30": 58,
+        "winners=18:00/90,19:30/30": 96,
+        "winners=19:00/30,19:30/30": 46
+      },
+      "barrier_min_waiting": 4,
+      "violations": 0
+    },
+    {
+      "scenario": "basketball_vs_futsal",
+      "iterations_per_mode": 100,
+      "total_runs": 200,
+      "outcomes": {
+        "Basketball won": 109,
+        "Futsal won": 91
+      },
+      "barrier_min_waiting": 2,
+      "violations": 0
+    }
+  ]
+}

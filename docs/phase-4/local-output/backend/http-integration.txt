@@ -1,0 +1,14 @@
+✔ registration: any email domain, verification code required before login (D1, D2) (409.255425ms)
+✔ password reset by emailed code (539.378855ms)
+✔ privacy: user B cannot retrieve user A's bookings or profile through any Data API path (585.278146ms)
+✔ privacy: direct writes and privilege escalation are refused (152.219573ms)
+✔ signed-out callers get nothing (21.08005ms)
+✔ deactivated user loses booking RPC access immediately, with the same still-valid JWT (528.768849ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2383.639561

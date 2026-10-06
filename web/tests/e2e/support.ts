@@ -11,7 +11,26 @@ const env = (k: string) => {
 export const SUPABASE_URL = env('SUPABASE_URL');
 const PUBLISHABLE = env('SUPABASE_PUBLISHABLE_KEY');
 const SECRET = env('SUPABASE_SECRET_KEY');
-const MAILPIT = env('MAILPIT_URL');
+// Email backend for auth tests: local Mailpit, or (staging) a real mailbox read over IMAP.
+const MAILPIT = process.env.MAILPIT_URL;
+const IMAP = process.env.TEST_IMAP_HOST
+  ? { host: process.env.TEST_IMAP_HOST, port: Number(process.env.TEST_IMAP_PORT ?? 993), user: env('TEST_IMAP_USER'), pass: env('TEST_IMAP_PASS') }
+  : null;
+const MAILBOX = process.env.TEST_MAILBOX;              // e.g. dcu.e2e@gmail.com (plus-addressing must be supported)
+if (!MAILPIT && !IMAP) throw new Error('Set MAILPIT_URL (local) or TEST_IMAP_* + TEST_MAILBOX (staging)');
+
+/**
+ * An address whose mail the tests can read. Locally any address works (Mailpit catches everything);
+ * on staging real SMTP is used, so it is a plus-address of the test mailbox (never a fake domain that would bounce).
+ */
+export function inboxAddress(tag: string, localDomain = 'example.com'): string {
+  const u = `${tag}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
+  if (IMAP && MAILBOX) {
+    const [local, domain] = MAILBOX.split('@');
+    return `${local}+${u}@${domain}`;
+  }
+  return `${u}@${localDomain}`;
+}
 export const PASSWORD = 'Dcu-Test-2026!';      // local test value; meets the policy
 
 export const pool = new pg.Pool({ connectionString: env('SUPABASE_DB_URL'), max: 4 });
@@ -22,8 +41,8 @@ let seq = 0;
 const run = Date.now().toString(36);
 export interface TestUser { email: string; id: string; name: string; token?: string }
 
-export async function createUser(prefix: string, opts: { admin?: boolean; name?: string } = {}): Promise<TestUser> {
-  const email = `${prefix}.${run}.${++seq}@example.com`;
+export async function createUser(prefix: string, opts: { admin?: boolean; name?: string; realInbox?: boolean } = {}): Promise<TestUser> {
+  const email = opts.realInbox ? inboxAddress(prefix) : `${prefix}.${run}.${++seq}@example.com`;
   const name = opts.name ?? `${prefix[0]!.toUpperCase()}${prefix.slice(1)} Tester`;
   const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
     method: 'POST',
@@ -100,21 +119,55 @@ export const CHECKIN_NOW_START = `
        then date_trunc('hour', now()) + interval '30 min' * floor(extract(minute from now()) / 30)
        else date_trunc('hour', now()) + interval '30 min' * (floor(extract(minute from now()) / 30) + 1) end`;
 
-// ---------- Email (local Mailpit) ----------
+// ---------- Email ----------
+function parseEmail(subject: string, html: string) {
+  const link = /href="([^"]+)"/.exec(html)?.[1]?.replace(/&amp;/g, '&');
+  const code = /letter-spacing:\s*4px[^>]*>\s*(\d{6})\s*</.exec(html)?.[1];
+  return { subject, link, code };
+}
+
 export async function latestEmail(to: string, after: number) {
-  for (let i = 0; i < 60; i++) {
-    const list = await (await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`)).json();
-    const m = (list.messages ?? []).find((x: { Created: string }) => new Date(x.Created).getTime() > after);
-    if (m) {
-      const full = await (await fetch(`${MAILPIT}/api/v1/message/${m.ID}`)).json();
-      const html: string = full.HTML ?? '';
-      const link = /href="([^"]+)"/.exec(html)?.[1]?.replace(/&amp;/g, '&');
-      const code = /letter-spacing:4px">\s*(\d{6})\s*</.exec(html)?.[1];
-      return { subject: full.Subject as string, link, code };
+  if (MAILPIT) {
+    for (let i = 0; i < 60; i++) {
+      const list = await (await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`)).json();
+      const m = (list.messages ?? []).find((x: { Created: string }) => new Date(x.Created).getTime() > after);
+      if (m) {
+        const full = await (await fetch(`${MAILPIT}/api/v1/message/${m.ID}`)).json();
+        return parseEmail(full.Subject as string, full.HTML ?? '');
+      }
+      await new Promise((r) => setTimeout(r, 250));
     }
-    await new Promise((r) => setTimeout(r, 250));
+    throw new Error(`no email to ${to}`);
   }
-  throw new Error(`no email to ${to}`);
+  // Real mailbox over IMAP (staging): poll up to ~2 minutes for SMTP delivery.
+  const { ImapFlow } = await import('imapflow');
+  const { simpleParser } = await import('mailparser');
+  for (let i = 0; i < 40; i++) {
+    const client = new ImapFlow({ host: IMAP!.host, port: IMAP!.port, secure: true, auth: { user: IMAP!.user, pass: IMAP!.pass }, logger: false });
+    await client.connect();
+    try {
+      for (const box of ['INBOX', '[Gmail]/Spam']) {
+        const lock = await client.getMailboxLock(box).catch(() => null);
+        if (!lock) continue;
+        try {
+          const uids = (await client.search({ to, since: new Date(after - 60_000) }, { uid: true })) || [];
+          for (const uid of [...uids].reverse()) {
+            const msg = await client.fetchOne(String(uid), { source: true, internalDate: true }, { uid: true });
+            if (!msg || !msg.source) continue;
+            if (msg.internalDate && new Date(msg.internalDate).getTime() < after - 5_000) continue;
+            const parsed = await simpleParser(msg.source);
+            return parseEmail(parsed.subject ?? '', typeof parsed.html === 'string' ? parsed.html : '');
+          }
+        } finally {
+          lock.release();
+        }
+      }
+    } finally {
+      await client.logout().catch(() => {});
+    }
+    await new Promise((r) => setTimeout(r, 3_000));
+  }
+  throw new Error(`no email to ${to} within 2 minutes`);
 }
 
 // ---------- UI helpers ----------

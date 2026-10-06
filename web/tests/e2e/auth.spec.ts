@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { createUser, latestEmail, login, PASSWORD, q, rpcAs } from './support';
+import { createUser, inboxAddress, latestEmail, login, PASSWORD, q, rpcAs } from './support';
 
-const uniq = () => `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
 
 test.describe('Authentication journeys', () => {
   test('register → verification email → confirm via link → signed in (any email domain)', async ({ page }) => {
-    const email = `new.${uniq()}@gmail.com`;
+    const email = inboxAddress('new', 'gmail.com');         // any domain may register (D1)
     const t0 = Date.now() - 2000;
     await page.goto('/register');
     await page.getByLabel('Full name').fill('Rina Participant');
@@ -57,7 +56,7 @@ test.describe('Authentication journeys', () => {
   });
 
   test('register → verify with the 6-digit code', async ({ page }) => {
-    const email = `code.${uniq()}@yahoo.com`;
+    const email = inboxAddress('code', 'yahoo.com');
     const t0 = Date.now() - 2000;
     await page.goto('/register');
     await page.getByLabel('Full name').fill('Budi Trainer');
@@ -78,7 +77,7 @@ test.describe('Authentication journeys', () => {
   });
 
   test('login errors and forgot/reset password via the emailed link', async ({ page }) => {
-    const u = await createUser('forgetful');
+    const u = await createUser('forgetful', { realInbox: true });
     await page.goto('/login');
     await page.getByLabel('Email').fill(u.email);
     await page.getByLabel('Password', { exact: true }).fill('Wrong-Pass-1!');
@@ -102,6 +101,23 @@ test.describe('Authentication journeys', () => {
     await page.getByLabel('Password', { exact: true }).fill(newPassword);
     await page.getByRole('button', { name: 'Log in' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Forgetful');
+  });
+
+  test('session persists across a browser restart and ends on sign-out', async ({ page, browser }) => {
+    const u = await createUser('persist');
+    await login(page, u);
+    const state = await page.context().storageState();
+    // A brand-new browser context with the saved storage = closing and reopening the browser / PWA.
+    const ctx = await browser.newContext({ storageState: state, viewport: { width: 412, height: 915 } });
+    const again = await ctx.newPage();
+    await again.goto('/bookings');
+    await expect(again.getByRole('heading', { name: 'My bookings' })).toBeVisible();
+    await again.getByRole('link', { name: 'Profile', exact: true }).click();
+    await again.getByRole('button', { name: 'Sign out' }).click();
+    await expect(again.getByRole('heading', { name: 'Log in' })).toBeVisible();
+    await again.goto('/bookings');
+    await expect(again).toHaveURL(/\/login\?next=%2Fbookings/);
+    await ctx.close();
   });
 
   test('deactivated user is moved to "Account disabled" on the next server call', async ({ page }) => {

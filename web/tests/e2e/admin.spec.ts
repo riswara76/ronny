@@ -20,6 +20,11 @@ test.describe('Admin journeys (desktop Chrome 1440×900)', () => {
     await login(page, admin);
     await page.getByRole('link', { name: 'Admin' }).click();
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+    // Regression (Phase 4): the admin's own profile must load even though RLS lets admins see all profiles.
+    await page.getByRole('link', { name: 'Back to booking app' }).click();
+    await page.getByRole('link', { name: 'Profile', exact: true }).click();
+    await expect(page.getByText(admin.email)).toBeVisible();
+    await page.goto('/admin');
     for (const label of ['Bookings on this day', 'Upcoming bookings (all days)', 'Checked in', 'Cancellations', 'No-shows (last 7 days)', 'Active users']) {
       await expect(page.getByRole('list', { name: 'Summary' }).getByText(label, { exact: true })).toBeVisible();
     }

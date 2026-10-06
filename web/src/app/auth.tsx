@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const profileQuery = useQuery({
     queryKey: ['profile', userId],
     enabled: !!userId && !disabled,
-    queryFn: getMyProfile,
+    queryFn: () => getMyProfile(userId!),
     staleTime: 5 * 60_000,
   });
 

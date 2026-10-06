@@ -1,6 +1,8 @@
-# Security and cache headers (Netlify / Cloudflare Pages format). Replace <project-ref>.
+# Security and cache headers (Netlify / Cloudflare Pages format).
+# __SUPABASE_HTTP__ / __SUPABASE_WS__ are replaced at build time by scripts/write-hosting-config.mjs
+# with the origin of VITE_SUPABASE_URL, so the CSP always matches the project it was built for.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://<project-ref>.supabase.co wss://<project-ref>.supabase.co; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' __SUPABASE_HTTP__ __SUPABASE_WS__; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

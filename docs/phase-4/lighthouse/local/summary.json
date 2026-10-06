@@ -1,0 +1,86 @@
+[
+  {
+    "page": "login",
+    "path": "/login",
+    "profile": "mobile",
+    "performance": 82,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "fcp": "3.6 s",
+    "lcp": "3.7 s",
+    "tbt": "10 ms",
+    "cls": "0"
+  },
+  {
+    "page": "register",
+    "path": "/register",
+    "profile": "mobile",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "fcp": "0.1 s",
+    "lcp": "0.1 s",
+    "tbt": "0 ms",
+    "cls": "0"
+  },
+  {
+    "page": "home",
+    "path": "/",
+    "profile": "mobile",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "fcp": "0.1 s",
+    "lcp": "0.1 s",
+    "tbt": "10 ms",
+    "cls": "0"
+  },
+  {
+    "page": "book-tennis",
+    "path": "/book/tennis",
+    "profile": "mobile",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "fcp": "0.1 s",
+    "lcp": "0.1 s",
+    "tbt": "0 ms",
+    "cls": "0"
+  },
+  {
+    "page": "my-bookings",
+    "path": "/bookings",
+    "profile": "mobile",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "fcp": "0.1 s",
+    "lcp": "0.1 s",
+    "tbt": "0 ms",
+    "cls": "0"
+  },
+  {
+    "page": "admin-dashboard",
+    "path": "/admin",
+    "profile": "desktop",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "fcp": "0.0 s",
+    "lcp": "0.0 s",
+    "tbt": "0 ms",
+    "cls": "0"
+  },
+  {
+    "page": "admin-bookings",
+    "path": "/admin/bookings",
+    "profile": "desktop",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "fcp": "0.0 s",
+    "lcp": "0.0 s",
+    "tbt": "0 ms",
+    "cls": "0"
+  }
+]

@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-static:
+    name: Web — lint, typecheck, unit, build + secret scan, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          TZ: America/New_York      # proves all displayed times are Jakarta time
+      - name: Build (placeholder public config) + bundle secret scan
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      - name: Dependency audit (runtime dependencies)
+        run: npm audit --omit=dev --audit-level=moderate
+
+  backend-and-e2e:
+    name: Backend (pgTAP, HTTP, concurrency) + Playwright E2E on local Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            scripts/backend-tests/package-lock.json
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+      - name: Start local Supabase
+        run: supabase start -x studio,imgproxy,vector,logflare,storage-api,edge-runtime,postgres-meta,supavisor
+      - name: Backend suite (pgTAP + HTTP + concurrency regression)
+        run: ./scripts/run-backend-tests.sh
+        env:
+          CONCURRENCY_ITERATIONS: 50
+          OUT_DIR: ${{ github.workspace }}/artifacts/backend
+      - name: Install web deps and Playwright Chromium
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Web suite (unit + lint + build + E2E incl. security headers/CSP, PWA, a11y)
+        run: ./scripts/run-web-tests.sh
+      - name: Advisors (Security + Performance lints)
+        if: always()
+        run: |
+          eval "$(supabase status -o env)"
+          DB_URL="$DB_URL" ./scripts/run-advisors.sh artifacts/advisors.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-evidence
+          path: |
+            artifacts/
+            web/test-results/
+          retention-days: 14

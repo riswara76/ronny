@@ -1,0 +1,25 @@
+  tennis_2_users: {"A wins":130,"B wins":70} (barrier min waiting=2)
+✔ 1. two users, one Tennis court, same 60-min slot -> exactly one succeeds; cancel then immediate rebook (11892.092638ms)
+  air_hockey_3_users_2_tables: {"loser=s2c":90,"loser=s2b":68,"loser=s2a":42} (barrier min waiting=3)
+✔ 2. three users, two AIR_HOCKEY tables -> exactly two succeed on different tables (9126.101594ms)
+  foosball_3_users_2_tables: {"loser=s3c":68,"loser=s3b":86,"loser=s3a":46} (barrier min waiting=3)
+✔ 3. three users, two FOOSBALL tables -> exactly two succeed on different tables (9166.91092ms)
+  same_user_overlap: {"winners=foosball+tabletennis":95,"winners=tennis+tabletennis":105} (barrier min waiting=3)
+✔ 4. same user, simultaneous overlapping requests -> only a valid combination succeeds (13852.280638ms)
+  booking_vs_admin_block: {"booking first, block refused (conflict)":65,"booking first, then block cancelled it":71,"block first, booking refused":64} (barrier min waiting=2)
+✔ 5. booking vs admin block race -> never both; confirmed block cancels a booking that won (5518.434956ms)
+  cancel_vs_rebook_race: {"rebook won after cancel committed":87,"rebook saw slot still held, retry succeeded":113} (barrier min waiting=null)
+✔ 6. cancellation racing a new booking for the same slot -> never two live bookings (5844.810363ms)
+  mixed_duration_overlap: {"winners=18:30/60,19:30/30":58,"winners=18:00/90,19:30/30":96,"winners=19:00/30,19:30/30":46} (barrier min waiting=4)
+✔ 7. overlapping 30/60/90-minute requests on one court -> winners never overlap (9677.482092ms)
+  basketball_vs_futsal: {"Basketball won":109,"Futsal won":91} (barrier min waiting=2)
+✔ 8. Basketball vs Futsal for the same court and time -> exactly one succeeds (6063.738887ms)
+✔ global invariants after all races (4.938389ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 71282.621933
