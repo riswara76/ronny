@@ -88,7 +88,8 @@ jobs:
           DCU_USER1_EMAIL: ${{ secrets.STAGING_USER1_EMAIL }}
           DCU_USER2_EMAIL: ${{ secrets.STAGING_USER2_EMAIL }}
           DCU_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
-        run: node scripts/create-test-users.mjs | sed -E 's/password: .*/password: (hidden)/'
+        run: |
+          node scripts/create-test-users.mjs | sed -E 's/password: .*/password: (hidden)/'
 
       - name: Playwright Chromium
         working-directory: web
