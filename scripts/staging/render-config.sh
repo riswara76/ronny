@@ -4,6 +4,7 @@
 #
 # Required env: SITE_URL (e.g. https://dcu-active-staging.netlify.app — exact origin, no wildcard)
 #               SMTP_HOST SMTP_PORT SMTP_USER SMTP_ADMIN_EMAIL SMTP_SENDER_NAME (SMTP_PASS read at push time)
+#               RATE_PROFILE=staging|production (default staging)
 # Output: path of the rendered workdir on stdout.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -19,7 +20,13 @@ import re, sys
 p = sys.argv[1]; s = open(p).read()
 s = re.sub(r'^site_url = .*$', 'site_url = "${SITE_URL}"', s, flags=re.M)
 s = re.sub(r'^additional_redirect_urls = .*$', 'additional_redirect_urls = ["${SITE_URL}"]', s, flags=re.M)
-s = re.sub(r'^(\s*)email_sent = .*$', r'\1email_sent = 60', s, flags=re.M)
+# Rate limits: "staging" allows the automated suite (~50 sign-ins and ~10 emails per run);
+# "production" keeps conservative values that still cover normal DCU usage.
+profile = "${RATE_PROFILE:-staging}"
+limits = {'staging': {'email_sent': 60, 'sign_in_sign_ups': 300, 'token_verifications': 300},
+          'production': {'email_sent': 30, 'sign_in_sign_ups': 30, 'token_verifications': 30}}[profile]
+for k, v in limits.items():
+    s = re.sub(r'^(\s*)' + k + r' = .*$', r'\g<1>' + k + ' = ' + str(v), s, flags=re.M)
 s += '''
 # --- rendered for hosted environment ---
 [auth.email.smtp]

@@ -20,7 +20,7 @@ Legend: ✅ done with evidence · 🟡 built and verified locally, waiting for s
 | 12 | Lighthouse + accessibility on staging | ✅ local, 🟡 staging | Local, cold `/login` on mobile throttling: performance 82, accessibility 100, best practices 100, FCP 3.6 s. axe: 0 serious/critical on 11 screens × 2 widths. The staging run is in the workflow. |
 | 13 | Server authority preserved | ✅ | No rule moved to React. The only client change was a bug fix: the profile query now filters by the user's id. |
 | 14 | Concurrency guarantees + Phase 2 regression | ✅ local, 🟡 staging | Local: pgTAP 211/211, HTTP 6/6, concurrency 9/9 at 100 × 2 iterations (1,600 races, 0 violations). The staging run uses 50 × 2. |
-| 15 | CI: tests, lint, typecheck, build/secret scan, audit | ✅ | `.github/workflows/ci.yml` runs on every push: lint, typecheck, unit (TZ=New York), build + secret scan, `npm audit`, backend + concurrency, full E2E, advisors. Validated with actionlint; first GitHub runs in progress. |
+| 15 | CI: tests, lint, typecheck, build/secret scan, audit | ✅ | `.github/workflows/ci.yml` runs on every push: lint, typecheck, unit (TZ=New York), build + secret scan, `npm audit`, backend + concurrency, full E2E, advisors. Validated with actionlint. First complete GitHub run [#5](https://github.com/riswara76/ronny/actions/runs/37409043063): web-static job green; backend + concurrency green; E2E 37/38. The one failure was the local email rate limit (defect 4), now fixed and re-verified locally; the confirmation run follows this commit. |
 
 ## Defects found in Phase 4 so far
 
@@ -29,6 +29,7 @@ Legend: ✅ done with evidence · 🟡 built and verified locally, waiting for s
 | 1 | Admin's own profile failed to load (HTTP 406): an unfiltered `.single()` on `profiles`, while RLS lets admins read all profiles. Effect: no name in the greeting, Profile page spinner. | CSP/console check (security spec) | `getMyProfile(userId)` filters `.eq('id', userId)` | `admin.spec.ts` dashboard test now opens the admin's Profile |
 | 2 | `staging.yml` YAML parse error | First GitHub run | Quoting fixed | actionlint in the review checklist |
 | 3 | 9 FK columns without covering indexes | Advisors | Migration `…000800_fk_indexes.sql` (performance only) | Backend suite green |
+| 4 | Password-reset E2E failed on CI: the local Auth `email_sent` limit (2/hour) was exceeded by earlier test emails | First CI run (#5) | Local/CI limit raised to 100. Hosted limits are now explicit per profile in `render-config.sh` (staging: 60 emails, 300 sign-ins; production: 30/30/30) | Backend then web suites run back-to-back locally (CI order): all green |
 
 ## Known non-blocking items
 
