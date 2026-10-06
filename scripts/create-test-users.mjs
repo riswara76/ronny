@@ -45,7 +45,7 @@ for (const a of accounts) {
   let user = await findUser(a.email);
   let password = null;
   if (!user) {
-    password = sharedPassword ?? `${randomBytes(12).toString('base64url')}!9a`;
+    password = sharedPassword ?? `${randomBytes(12).toString('base64url')}Aa1!`;
     const r = await fetch(`${base}/auth/v1/admin/users`, {
       method: 'POST', headers,
       body: JSON.stringify({ email: a.email, password, email_confirm: true, user_metadata: { full_name: a.name } }),

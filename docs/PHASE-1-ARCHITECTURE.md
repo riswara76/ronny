@@ -1,5 +1,10 @@
 # DCU Active — Phase 1: Product & Technical Architecture
 
+> **Amended 2026-10-06:** the primary client is now a responsive Web/PWA (React + TypeScript), not an Android APK.
+> See `docs/architecture/WEB-PWA-ARCHITECTURE-AMENDMENT.md` and `docs/architecture/WEB-FRONTEND-DECISION.md`.
+> The backend design in this document is unchanged.
+
+
 Status: **Draft for approval** · Scope: design only (no production code, no APK)
 Prototype evidence: [`docs/phase-1/concurrency-prototype.sql`](phase-1/concurrency-prototype.sql)
 
