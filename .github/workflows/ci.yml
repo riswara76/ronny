@@ -74,6 +74,12 @@ jobs:
         run: |
           eval "$(supabase status -o env)"
           DB_URL="$DB_URL" ./scripts/run-advisors.sh artifacts/advisors.txt
+      - name: Auth server log (on failure)
+        if: failure()
+        run: |
+          mkdir -p artifacts
+          docker logs supabase_auth_dcu-active > artifacts/auth.log 2>&1 || true
+          grep -iE '"(level|msg)":"(error|warn)|/recover|rate|limit|status":4' artifacts/auth.log | tail -n 60 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

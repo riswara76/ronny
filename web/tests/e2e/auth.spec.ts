@@ -88,7 +88,11 @@ test.describe('Authentication journeys', () => {
     await page.getByRole('link', { name: 'Forgot password?' }).click();
     await page.getByLabel('Email').fill(u.email);
     await page.getByRole('button', { name: 'Send reset email' }).click();
-    await expect(page.getByText(/If an account exists/)).toBeVisible();
+    // Surface the server's error text in the report instead of a bare timeout.
+    const sent = page.getByText(/If an account exists/);
+    const failure = page.getByRole('alert');
+    await expect(sent.or(failure)).toBeVisible({ timeout: 20_000 });
+    if (await failure.isVisible()) throw new Error(`reset request failed: ${await failure.innerText()}`);
 
     const mail = await latestEmail(u.email, t0);
     expect(mail.link).toContain('/auth/reset-password?token_hash=');
