@@ -1,0 +1,12 @@
+{
+  "name": "dcu-active-backend-tests",
+  "private": true,
+  "type": "module",
+  "description": "HTTP-level integration, privacy and concurrency tests against a Supabase project (local by default).",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-reporter=spec"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

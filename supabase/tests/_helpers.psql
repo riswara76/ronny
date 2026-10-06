@@ -1,0 +1,86 @@
+-- Shared pgTAP helpers, included by every *.test.sql file with \ir.
+-- Everything here is created inside the test transaction and rolled back.
+--
+-- Fixed test clock: Monday 2030-01-07 09:05 Asia/Jakarta.
+--   today = 2030-01-07, last bookable date = 2030-01-14 (today + 7).
+-- private.now() honours dcu.test_now only for `postgres` sessions (see foundation migration).
+
+create extension if not exists pgtap with schema extensions;
+
+create schema if not exists tests;
+grant usage on schema tests to authenticated, anon;
+
+create or replace function tests.uid(p_key text) returns uuid
+language sql immutable as $$ select md5('dcu-test-' || p_key)::uuid $$;
+
+create or replace function tests.create_user(
+  p_key text, p_full_name text default null, p_confirmed boolean default true, p_admin boolean default false
+) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare v_id uuid := tests.uid(p_key);
+begin
+  insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at, raw_user_meta_data, created_at, updated_at)
+  values (v_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+          p_key || '@test.dcu', case when p_confirmed then now() end,
+          jsonb_build_object('full_name', coalesce(p_full_name, 'Test ' || p_key)), now(), now());
+  if p_admin then
+    update public.profiles set role = 'ADMIN' where id = v_id;
+  end if;
+  return v_id;
+end $$;
+
+-- Impersonate a signed-in user exactly like PostgREST does (role + JWT claims).
+create or replace function tests.login(p_key text) returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', tests.uid(p_key), 'role', 'authenticated')::text, true);
+  perform set_config('role', 'authenticated', true);
+end $$;
+
+create or replace function tests.login_anon() returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
+  perform set_config('role', 'anon', true);
+end $$;
+
+create or replace function tests.set_now(p_ts timestamptz) returns void
+language sql as $$ select set_config('dcu.test_now', p_ts::text, true); $$;
+
+create or replace function tests.fac(p_code text) returns uuid
+language sql stable security definer set search_path = '' as $$
+  select id from public.facilities where code = p_code $$;
+
+create or replace function tests.act(p_code text) returns uuid
+language sql stable security definer set search_path = '' as $$
+  select id from public.activities where code = p_code $$;
+
+create or replace function tests.res(p_name text) returns uuid
+language sql stable security definer set search_path = '' as $$
+  select id from public.resources where name = p_name $$;
+
+-- Book as the current (impersonated) user. Activity defaults to the facility's first one.
+create or replace function tests.book(
+  p_fac text, p_date date, p_time time, p_minutes integer default 30, p_act text default null
+) returns jsonb
+language sql as $$
+  select public.create_booking(
+    tests.fac(p_fac),
+    coalesce(tests.act(p_act), (select a.id from public.activities a where a.facility_id = tests.fac(p_fac) order by a.sort_order limit 1)),
+    p_date, p_time, p_minutes);
+$$;
+
+-- Resource name a booking was allocated to (reads as owner, bypassing RLS).
+create or replace function tests.resource_of(p_booking jsonb) returns text
+language sql volatile security definer set search_path = '' as $$
+  select r.name from public.bookings b join public.resources r on r.id = b.resource_id
+  where b.id = (p_booking ->> 'id')::uuid $$;
+
+create or replace function tests.slot_status(p_fac text, p_date date, p_time time) returns text
+language sql as $$
+  select status from public.get_availability(tests.fac(p_fac), p_date) where slot_start = p_time $$;
+
+grant execute on all functions in schema tests to authenticated, anon;
+
+select tests.set_now('2030-01-07 09:05:00+07');

@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Local environment and secrets — never commit
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+key.properties
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
