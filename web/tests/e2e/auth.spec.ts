@@ -86,6 +86,8 @@ test.describe('Authentication journeys', () => {
 
     const t0 = Date.now() - 2000;
     await page.getByRole('link', { name: 'Forgot password?' }).click();
+    // Wait for the route change: the login page has an Email field too (defect 4 was this race).
+    await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible();
     await page.getByLabel('Email').fill(u.email);
     await page.getByRole('button', { name: 'Send reset email' }).click();
     // Surface the server's error text in the report instead of a bare timeout.
