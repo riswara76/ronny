@@ -1,6 +1,6 @@
 # DCU Active — Staging Setup (what you need to create)
 
-> Indonesian step-by-step version for the chosen setup (own domain + Resend + Netlify): `PANDUAN-STAGING-ID.md`.
+> **Simplified (current):** only 13 secrets are required; SMTP host/port/user/sender (Resend), IMAP host/port/user (Gmail), the Supabase URL and the three test-account emails (plus-addresses of `TEST_MAILBOX`) have defaults in `staging.yml` and are optional overrides. A preflight step names any missing or malformed secret. Step-by-step (Indonesian): `PANDUAN-STAGING-ID.md`.
 
 Staging runs entirely from **GitHub Actions** (`.github/workflows/staging.yml`).
 

@@ -25,19 +25,23 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 90
+    # Only 13 secrets are required (docs/phase-4/PANDUAN-STAGING-ID.md). Everything else has a default
+    # (Resend SMTP, Gmail IMAP, test accounts as plus-addresses of TEST_MAILBOX) and can still be
+    # overridden by adding a secret with the same name.
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: ${{ secrets.STAGING_PROJECT_REF }}
-      SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL || format('https://{0}.supabase.co', secrets.STAGING_PROJECT_REF) }}
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
       SUPABASE_SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
       SUPABASE_DB_URL: ${{ secrets.STAGING_DB_URL }}
       STAGING_SITE_URL: ${{ secrets.STAGING_SITE_URL }}
       TEST_MAILBOX: ${{ secrets.TEST_MAILBOX }}
-      TEST_IMAP_HOST: ${{ secrets.TEST_IMAP_HOST }}
-      TEST_IMAP_PORT: ${{ secrets.TEST_IMAP_PORT }}
-      TEST_IMAP_USER: ${{ secrets.TEST_IMAP_USER }}
+      TEST_IMAP_HOST: ${{ secrets.TEST_IMAP_HOST || 'imap.gmail.com' }}
+      TEST_IMAP_PORT: ${{ secrets.TEST_IMAP_PORT || '993' }}
+      TEST_IMAP_USER: ${{ secrets.TEST_IMAP_USER || secrets.TEST_MAILBOX }}
       TEST_IMAP_PASS: ${{ secrets.TEST_IMAP_PASS }}
+      STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,6 +52,51 @@ jobs:
           version: 2.119.0
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
 
+      - name: Preflight (names any missing or malformed secret; prints no values)
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_ADMIN_EMAIL: ${{ secrets.SMTP_ADMIN_EMAIL }}
+          ADMIN_OVERRIDE: ${{ secrets.STAGING_ADMIN_EMAIL }}
+          USER1_OVERRIDE: ${{ secrets.STAGING_USER1_EMAIL }}
+          USER2_OVERRIDE: ${{ secrets.STAGING_USER2_EMAIL }}
+        run: |
+          fail=0
+          need() { if [ -z "${!1}" ]; then echo "::error::Missing secret: $2"; fail=1; fi; }
+          need SUPABASE_ACCESS_TOKEN SUPABASE_ACCESS_TOKEN
+          need PROJECT_REF STAGING_PROJECT_REF
+          need SUPABASE_PUBLISHABLE_KEY STAGING_PUBLISHABLE_KEY
+          need SUPABASE_SECRET_KEY STAGING_SECRET_KEY
+          need SUPABASE_DB_URL STAGING_DB_URL
+          need NETLIFY_SITE_ID NETLIFY_SITE_ID
+          need NETLIFY_AUTH_TOKEN NETLIFY_AUTH_TOKEN
+          need STAGING_SITE_URL STAGING_SITE_URL
+          need SMTP_PASS SMTP_PASS
+          need SMTP_ADMIN_EMAIL SMTP_ADMIN_EMAIL
+          need TEST_MAILBOX TEST_MAILBOX
+          need TEST_IMAP_PASS TEST_IMAP_PASS
+          need STAGING_TEST_PASSWORD STAGING_TEST_PASSWORD
+          bad() { echo "::error::$1"; fail=1; }
+          [[ -z "$PROJECT_REF" || "$PROJECT_REF" =~ ^[a-z]{20}$ ]] || bad "STAGING_PROJECT_REF should be 20 lowercase letters"
+          [[ -z "$SUPABASE_PUBLISHABLE_KEY" || "$SUPABASE_PUBLISHABLE_KEY" == sb_publishable_* ]] || bad "STAGING_PUBLISHABLE_KEY should start with sb_publishable_"
+          [[ -z "$SUPABASE_SECRET_KEY" || "$SUPABASE_SECRET_KEY" == sb_secret_* ]] || bad "STAGING_SECRET_KEY should start with sb_secret_"
+          [[ -z "$SUPABASE_DB_URL" || "$SUPABASE_DB_URL" == postgresql://* ]] || bad "STAGING_DB_URL should start with postgresql://"
+          [[ "$SUPABASE_DB_URL" != *YOUR-PASSWORD* ]] || bad "STAGING_DB_URL still contains [YOUR-PASSWORD]"
+          [[ -z "$STAGING_SITE_URL" || "$STAGING_SITE_URL" =~ ^https://[^/*]+$ ]] || bad "STAGING_SITE_URL must be https://host with no trailing slash and no *"
+          [[ -z "$SMTP_PASS" || "$SMTP_PASS" == re_* ]] || echo "::warning::SMTP_PASS does not look like a Resend key (re_...); fine only if you set SMTP_HOST/SMTP_USER for another provider"
+          [[ -z "$TEST_MAILBOX" || "$TEST_MAILBOX" == *@*.* ]] || bad "TEST_MAILBOX must be an email address"
+          [ ${#STAGING_TEST_PASSWORD} -ge 8 ] || [ -z "$STAGING_TEST_PASSWORD" ] || bad "STAGING_TEST_PASSWORD is shorter than 8"
+          [ "$fail" = 0 ] || { echo "Fix the secrets above in Settings -> Environments -> staging, then run again."; exit 1; }
+          # Test accounts default to plus-addresses of TEST_MAILBOX.
+          local_part="${TEST_MAILBOX%@*}"; domain="${TEST_MAILBOX#*@}"
+          {
+            echo "STAGING_ADMIN_EMAIL=${ADMIN_OVERRIDE:-$local_part+admin@$domain}"
+            echo "STAGING_USER1_EMAIL=${USER1_OVERRIDE:-$local_part+user1@$domain}"
+            echo "STAGING_USER2_EMAIL=${USER2_OVERRIDE:-$local_part+user2@$domain}"
+          } >> "$GITHUB_ENV"
+          echo "Preflight OK: all 13 required secrets present."
+
       - name: Migrate hosted database
         if: inputs.deploy
         run: supabase db push --db-url "$SUPABASE_DB_URL" --yes
@@ -56,12 +105,12 @@ jobs:
         if: inputs.deploy
         env:
           SITE_URL: ${{ secrets.STAGING_SITE_URL }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.resend.com' }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || '587' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'resend' }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_ADMIN_EMAIL: ${{ secrets.SMTP_ADMIN_EMAIL }}
-          SMTP_SENDER_NAME: ${{ secrets.SMTP_SENDER_NAME }}
+          SMTP_SENDER_NAME: ${{ secrets.SMTP_SENDER_NAME || 'DCU Active' }}
         run: |
           WORK="$(scripts/staging/render-config.sh)"
           supabase config push --workdir "$WORK" --project-ref "$PROJECT_REF" --yes
@@ -69,7 +118,7 @@ jobs:
       - name: Build web for staging
         working-directory: web
         env:
-          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL || format('https://{0}.supabase.co', secrets.STAGING_PROJECT_REF) }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_PUBLISHABLE_KEY }}
         run: |
           npm ci
@@ -84,11 +133,9 @@ jobs:
 
       - name: Test accounts (idempotent)
         env:
-          DCU_ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
-          DCU_USER1_EMAIL: ${{ secrets.STAGING_USER1_EMAIL }}
-          DCU_USER2_EMAIL: ${{ secrets.STAGING_USER2_EMAIL }}
           DCU_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
         run: |
+          export DCU_ADMIN_EMAIL="$STAGING_ADMIN_EMAIL" DCU_USER1_EMAIL="$STAGING_USER1_EMAIL" DCU_USER2_EMAIL="$STAGING_USER2_EMAIL"
           node scripts/create-test-users.mjs | sed -E 's/password: .*/password: (hidden)/'
 
       - name: Playwright Chromium
@@ -115,10 +162,9 @@ jobs:
         working-directory: web
         env:
           LH_BASE_URL: ${{ secrets.STAGING_SITE_URL }}
-          LH_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
           LH_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
           LH_OUT: ${{ github.workspace }}/evidence/lighthouse
-        run: node scripts/lighthouse.mjs
+        run: LH_EMAIL="$STAGING_ADMIN_EMAIL" node scripts/lighthouse.mjs
 
       - uses: actions/upload-artifact@v4
         if: always()
