@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05050a">
+<title>Mulai Dari Nol — Kinetic Typography</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@700;900&display=block" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05050a;
+    --ui: rgba(255, 255, 255, 0.92);
+    --ui-dim: rgba(255, 255, 255, 0.55);
+    --glass: rgba(18, 18, 26, 0.55);
+    --accent: #ffc53d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); overflow: hidden; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font-family: Inter, system-ui, sans-serif; color: var(--ui);
+    touch-action: manipulation;
+  }
+  #stage {
+    position: relative;
+    /* 9:16 yang selalu muat di layar, baik portrait maupun landscape */
+    width: min(100vw, calc(100dvh * 9 / 16));
+    height: min(100dvh, calc(100vw * 16 / 9));
+    background: #000;
+    overflow: hidden;
+    box-shadow: 0 0 80px rgba(0, 0, 0, 0.8);
+  }
+  @supports not (height: 100dvh) {
+    #stage { width: min(100vw, calc(100vh * 9 / 16)); height: min(100vh, calc(100vw * 16 / 9)); }
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #controls {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0));
+    display: flex; flex-direction: column; gap: 10px;
+    transition: opacity 0.35s ease, transform 0.35s ease;
+  }
+  #stage.idle #controls { opacity: 0; transform: translateY(12px); pointer-events: none; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  button {
+    appearance: none; border: 1px solid rgba(255,255,255,0.18);
+    background: var(--glass); color: var(--ui);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    height: 44px; min-width: 44px; padding: 0 14px; border-radius: 22px;
+    font: 700 13px/1 Inter, system-ui, sans-serif; letter-spacing: 0.04em;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer;
+  }
+  button:hover { border-color: rgba(255,255,255,0.4); }
+  button:active { transform: scale(0.96); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: var(--accent); color: #111; border-color: transparent; }
+  button svg { width: 18px; height: 18px; fill: currentColor; }
+  #rec { margin-left: auto; }
+  #rec.recording { background: #ff2e4d; color: #fff; border-color: transparent; }
+  #time { font: 700 12px/1 Inter, system-ui, sans-serif; color: var(--ui-dim); font-variant-numeric: tabular-nums; min-width: 78px; text-align: right; }
+  input[type=range] {
+    flex: 1; height: 28px; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) var(--p, 0%), rgba(255,255,255,0.22) var(--p, 0%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #fff; border: 0; }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.22); }
+  input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; }
+
+  #loader {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font: 700 12px/1 Inter, system-ui, sans-serif; letter-spacing: 0.3em; color: var(--ui-dim);
+    background: #000; transition: opacity 0.4s ease;
+  }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  #toast {
+    position: absolute; top: calc(16px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    background: var(--glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.18); border-radius: 18px;
+    padding: 10px 16px; font: 700 12px/1.3 Inter, system-ui, sans-serif; text-align: center;
+    max-width: calc(100% - 32px); opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  /* Mode render (?render=1): tanpa UI, untuk ekspor frame-by-frame */
+  body.render #controls, body.render #loader, body.render #toast { display: none; }
+  body.render #stage { width: 1080px; height: 1920px; box-shadow: none; }
+  body.render { display: block; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c" width="1080" height="1920" aria-label="Animasi kinetic typography: Jangan takut mulai dari nol. Takutlah jika kamu tidak pernah mencoba."></canvas>
+  <div id="loader">MEMUAT…</div>
+  <div id="toast"></div>
+  <div id="controls">
+    <div class="row">
+      <input id="seek" type="range" min="0" max="15" step="0.01" value="0" aria-label="Posisi waktu">
+      <span id="time">0.00 / 15.00</span>
+    </div>
+    <div class="row">
+      <button id="play" class="primary" aria-label="Play">
+        <svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><span>PLAY</span>
+      </button>
+      <button id="replay" aria-label="Replay">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span>REPLAY</span>
+      </button>
+      <button id="rec" aria-label="Rekam video">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg><span>REKAM</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  // Konfigurasi dasar
+  // ---------------------------------------------------------------------------
+  const W = 1080, H = 1920, CX = W / 2, CY = H / 2;
+  const DURATION = 15;
+  const params = new URLSearchParams(location.search);
+  const RENDER_MODE = params.has('render');
+  if (RENDER_MODE) document.body.classList.add('render');
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const FILTER_OK = 'filter' in CanvasRenderingContext2D.prototype;
+
+  const HEAD = "Anton, Impact, 'Arial Black', 'Helvetica Neue', sans-serif";
+  const BODY = "Inter, 'Arial Black', system-ui, sans-serif";
+
+  // Palet
+  const GOLD = ['#fff6d6', '#ffd257', '#ff9f1c'];
+  const RED = ['#ffd0d6', '#ff3b5c', '#c8102e'];
+  const WHITE = ['#ffffff', '#ffffff', '#cfd3e0'];
+
+  // ---------------------------------------------------------------------------
+  // Utilitas
+  // ---------------------------------------------------------------------------
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+  const ease = {
+    outExpo: t => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+    outCubic: t => 1 - Math.pow(1 - t, 3),
+    inCubic: t => t * t * t,
+    inOutCubic: t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+    outBack: t => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+    inExpo: t => (t <= 0 ? 0 : Math.pow(2, 10 * t - 10)),
+  };
+  // PRNG deterministik agar setiap frame identik saat di-seek / dirender ulang
+  function rng(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s += 0x6d2b79f5;
+      let r = Math.imul(s ^ (s >>> 15), 1 | s);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const mixRgb = (a, b, t) => a.map((v, i) => Math.round(lerp(v, b[i], t)));
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+  // ---------------------------------------------------------------------------
+  // Timeline teks
+  //   in/dur      : mulai & durasi animasi masuk per huruf
+  //   stagger     : jeda antar huruf
+  //   out/outDur  : mulai & durasi animasi keluar
+  // ---------------------------------------------------------------------------
+  const TEXT = [
+    // Scene 1 — JANGAN TAKUT
+    { text: 'JANGAN', y: 770, size: 170, track: 14, fill: WHITE, anim: 'slideLeft', in: 0.35, dur: 0.75, stagger: 0.055, out: 2.85, outDur: 0.45, outAnim: 'blurUp' },
+    { text: 'TAKUT', y: 1040, size: 360, track: 6, fill: GOLD, glow: 'gold', anim: 'zoomIn', in: 0.95, dur: 0.6, stagger: 0.07, out: 2.95, outDur: 0.45, outAnim: 'zoomOut' },
+
+    // Scene 2 — MULAI DARI NOL.
+    { text: 'MULAI DARI', y: 700, size: 135, track: 10, fill: WHITE, anim: 'riseUp', in: 3.3, dur: 0.6, stagger: 0.045, out: 5.75, outDur: 0.4, outAnim: 'blurUp' },
+    { text: 'NOL.', y: 1080, size: 470, track: 8, fill: GOLD, glow: 'gold', anim: 'slam', in: 3.95, dur: 0.45, stagger: 0.09, out: 5.8, outDur: 0.45, outAnim: 'zoomOut' },
+
+    // Scene 3 — TAKUTLAH JIKA KAMU
+    { text: 'TAKUTLAH', y: 830, size: 250, track: 4, fill: RED, glow: 'red', anim: 'dropRotate', in: 6.4, dur: 0.65, stagger: 0.05, out: 8.85, outDur: 0.4, outAnim: 'slideRight' },
+    { text: 'JIKA KAMU', y: 1080, size: 140, track: 12, fill: WHITE, anim: 'slideRightIn', in: 7.15, dur: 0.6, stagger: 0.04, out: 8.9, outDur: 0.4, outAnim: 'slideRight' },
+
+    // Scene 4 — TIDAK PERNAH
+    { text: 'TIDAK', y: 840, size: 330, track: 8, fill: WHITE, glow: 'white', anim: 'stamp', in: 9.35, dur: 0.32, stagger: 0, out: 11.75, outDur: 0.4, outAnim: 'blurUp' },
+    { text: 'PERNAH', y: 1110, size: 210, track: 10, fill: RED, glow: 'red', anim: 'riseUp', in: 10.0, dur: 0.6, stagger: 0.05, out: 11.8, outDur: 0.4, outAnim: 'zoomOut' },
+
+    // Scene 5 — MENCOBA.
+    { text: 'MENCOBA.', y: 990, size: 300, track: 6, fill: GOLD, glow: 'gold', anim: 'popRotate', in: 12.25, dur: 0.6, stagger: 0.06, out: 14.35, outDur: 0.55, outAnim: 'fade' },
+  ];
+
+  // Momen "hantaman": guncangan kamera, flash, gelombang kejut & ledakan partikel
+  const IMPACTS = [
+    { t: 1.18, amp: 18, ring: true, burst: 50, seed: 11 },
+    { t: 4.22, amp: 34, ring: true, burst: 90, seed: 23 },
+    { t: 6.95, amp: 10, ring: false, burst: 0, seed: 31 },
+    { t: 9.62, amp: 40, ring: true, burst: 70, seed: 47 },
+    { t: 13.05, amp: 28, ring: true, burst: 140, seed: 59 },
+  ];
+
+  // Transisi antar scene (light sweep + flash)
+  const TRANSITIONS = [3.2, 6.2, 9.2, 12.1];
+
+  // Garis aksen dekoratif
+  const LINES = [
+    { y: 1250, in: 1.3, out: 2.8, w: 520, c: 'gold' },
+    { y: 560, in: 3.5, out: 5.7, w: 380, c: 'gold' },
+    { y: 1290, in: 4.4, out: 5.7, w: 640, c: 'gold' },
+    { y: 640, in: 6.6, out: 8.8, w: 420, c: 'red' },
+    { y: 1210, in: 7.6, out: 8.8, w: 560, c: 'red' },
+    { y: 1250, in: 10.4, out: 11.7, w: 600, c: 'red' },
+    { y: 1170, in: 13.1, out: 14.4, w: 820, c: 'gold' },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // Efek masuk / keluar per huruf. s = state transform, p = progres 0..1
+  // ---------------------------------------------------------------------------
+  const IN = {
+    slideLeft(s, p) { const e = ease.outExpo(p); s.tx -= (1 - e) * 520; s.blur += (1 - e) * 24; s.a *= clamp(p * 2.5); s.sx *= lerp(1.6, 1, e); },
+    slideRightIn(s, p) { const e = ease.outExpo(p); s.tx += (1 - e) * 520; s.blur += (1 - e) * 24; s.a *= clamp(p * 2.5); s.sx *= lerp(1.6, 1, e); },
+    riseUp(s, p) { const e = ease.outExpo(p); s.ty += (1 - e) * 220; s.rot += (1 - e) * 0.25; s.blur += (1 - e) * 20; s.a *= clamp(p * 2); },
+    zoomIn(s, p) { const e = ease.outExpo(p); s.sc *= lerp(3.2, 1, e); s.blur += (1 - e) * 40; s.a *= clamp(p * 3); },
+    slam(s, p) { const e = ease.outCubic(p); s.sc *= lerp(5, 1, e); s.blur += (1 - e) * 50; s.a *= clamp(p * 4); s.rot += (1 - e) * -0.2; },
+    dropRotate(s, p) { const e = ease.outBack(p); s.ty -= (1 - e) * 320; s.rot += (1 - ease.outExpo(p)) * -1.4; s.sc *= lerp(0.4, 1, ease.outExpo(p)); s.blur += (1 - ease.outExpo(p)) * 18; s.a *= clamp(p * 3); },
+    stamp(s, p) { const e = ease.inExpo(p); s.sc *= lerp(4.5, 1, Math.min(1, e * 1.02)); s.blur += (1 - p) * 30; s.a *= clamp(p * 2.5); s.rot += (1 - p) * 0.12; },
+    popRotate(s, p, i) { const e = ease.outBack(p); s.sc *= e; s.rot += (1 - ease.outExpo(p)) * (i % 2 ? 0.9 : -0.9); s.ty += (1 - ease.outExpo(p)) * 120; s.blur += (1 - ease.outExpo(p)) * 16; s.a *= clamp(p * 3); },
+  };
+  const OUT = {
+    blurUp(s, p) { const e = ease.inCubic(p); s.ty -= e * 140; s.blur += e * 30; s.a *= 1 - e; s.sc *= 1 + e * 0.15; },
+    zoomOut(s, p) { const e = ease.inCubic(p); s.sc *= 1 + e * 2.4; s.blur += e * 40; s.a *= 1 - e; },
+    slideRight(s, p) { const e = ease.inCubic(p); s.tx += e * 700; s.sx *= 1 + e * 0.8; s.blur += e * 30; s.a *= 1 - e; },
+    fade(s, p) { const e = ease.inOutCubic(p); s.a *= 1 - e; s.blur += e * 12; s.sc *= 1 + e * 0.08; },
+  };
+
+  // ---------------------------------------------------------------------------
+  // Layout huruf (dihitung sekali setelah font termuat)
+  // ---------------------------------------------------------------------------
+  const MAX_TEXT_W = 900; // sisakan margin aman untuk UI TikTok/Reels
+  function layout() {
+    for (const el of TEXT) {
+      let size = el.size;
+      const measure = sz => {
+        ctx.font = `${sz}px ${HEAD}`;
+        const chars = [...el.text];
+        const ws = chars.map(ch => ctx.measureText(ch).width);
+        const total = ws.reduce((a, b) => a + b, 0) + el.track * (chars.length - 1) * (sz / el.size);
+        return { chars, ws, total };
+      };
+      let m = measure(size);
+      if (m.total > MAX_TEXT_W) { size = Math.floor(size * MAX_TEXT_W / m.total); m = measure(size); }
+      const track = el.track * (size / el.size);
+      let x = -m.total / 2;
+      el.fsize = size;
+      el.letters = m.chars.map((ch, i) => {
+        const l = { ch, cx: x + m.ws[i] / 2, w: m.ws[i] };
+        x += m.ws[i] + track;
+        return l;
+      });
+      el.end = el.out + el.outDur + el.letters.length * el.stagger * 0.4 + 0.05;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Partikel latar (deterministik berbasis waktu)
+  // ---------------------------------------------------------------------------
+  const DUST = (() => {
+    const r = rng(7), arr = [];
+    for (let i = 0; i < 150; i++) {
+      arr.push({ x: r() * W, y: r() * H, sp: 20 + r() * 90, sz: 0.8 + r() * 3.2, ph: r() * 6.28, sw: 10 + r() * 40, tw: 1 + r() * 3, depth: r() });
+    }
+    return arr;
+  })();
+  const BURSTS = IMPACTS.map(im => {
+    const r = rng(im.seed), arr = [];
+    for (let i = 0; i < im.burst; i++) {
+      const ang = r() * Math.PI * 2, spd = 400 + r() * 1400;
+      arr.push({ ang, spd, sz: 1.5 + r() * 4.5, life: 0.6 + r() * 1.1, streak: r() > 0.55 });
+    }
+    return arr;
+  });
+
+  // Grain film: beberapa tile noise yang digilir per frame
+  const GRAIN = Array.from({ length: 6 }, (_, k) => {
+    const g = document.createElement('canvas'); g.width = g.height = 256;
+    const gx = g.getContext('2d'), img = gx.createImageData(256, 256), r = rng(100 + k);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = r() * 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+    }
+    gx.putImageData(img, 0, 0);
+    return ctx.createPattern(g, 'repeat');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tema warna mengikuti waktu: emas → merah → emas (finale)
+  // ---------------------------------------------------------------------------
+  const C_GOLD = hexToRgb('#ffb21e'), C_RED = hexToRgb('#ff2443');
+  const BG_GOLD = [hexToRgb('#0b0a18'), hexToRgb('#1d1236')];
+  const BG_RED = [hexToRgb('#12030a'), hexToRgb('#3a0718')];
+  function theme(t) {
+    const k = smooth(6.0, 6.45, t) * (1 - smooth(11.95, 12.4, t));
+    return {
+      accent: mixRgb(C_GOLD, C_RED, k),
+      bgA: mixRgb(BG_GOLD[0], BG_RED[0], k),
+      bgB: mixRgb(BG_GOLD[1], BG_RED[1], k),
+      k,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Kamera: drift halus + guncangan saat impact + dorongan zoom di transisi
+  // ---------------------------------------------------------------------------
+  function camera(t) {
+    let sx = 0, sy = 0, rot = 0;
+    for (const im of IMPACTS) {
+      const d = t - im.t;
+      if (d < 0 || d > 0.9) continue;
+      const env = Math.exp(-d * 7) * im.amp;
+      sx += Math.sin(d * 71 + im.seed) * env;
+      sy += Math.cos(d * 63 + im.seed * 2) * env;
+      rot += Math.sin(d * 47) * env * 0.0006;
+    }
+    let zoom = 1 + 0.025 * Math.sin(t * 0.55) + t * 0.004;
+    for (const tr of TRANSITIONS) {
+      const d = t - tr;
+      zoom += 0.08 * Math.exp(-d * d * 18); // punch-in di setiap transisi
+    }
+    return { sx, sy, rot, zoom };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+  function drawBackground(t, th) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, rgba(th.bgA, 1));
+    g.addColorStop(0.5, rgba(th.bgB, 1));
+    g.addColorStop(1, rgba(th.bgA, 1));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // Orb cahaya yang bergerak
+    ctx.globalCompositeOperation = 'lighter';
+    const orbs = [
+      { x: CX + Math.sin(t * 0.5) * 320, y: 520 + Math.cos(t * 0.37) * 200, r: 760, a: 0.32 },
+      { x: CX + Math.cos(t * 0.42 + 2) * 360, y: 1450 + Math.sin(t * 0.33) * 220, r: 820, a: 0.26 },
+      { x: CX + Math.sin(t * 0.8 + 4) * 200, y: CY + Math.cos(t * 0.6) * 160, r: 520, a: 0.16 },
+    ];
+    for (const o of orbs) {
+      const rg = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+      rg.addColorStop(0, rgba(th.accent, o.a));
+      rg.addColorStop(1, rgba(th.accent, 0));
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Sinar diagonal (god rays) yang perlahan bergeser
+    ctx.save();
+    ctx.translate(CX, CY);
+    ctx.rotate(-0.42);
+    for (let i = 0; i < 5; i++) {
+      const x = ((i * 430 + t * 70) % 2150) - 1075;
+      const lg = ctx.createLinearGradient(x - 90, 0, x + 90, 0);
+      lg.addColorStop(0, rgba(th.accent, 0));
+      lg.addColorStop(0.5, rgba(th.accent, 0.05 + 0.03 * Math.sin(t * 1.3 + i)));
+      lg.addColorStop(1, rgba(th.accent, 0));
+      ctx.fillStyle = lg;
+      ctx.fillRect(x - 90, -1400, 180, 2800);
+    }
+    ctx.restore();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Grid perspektif tipis di bagian bawah
+    ctx.save();
+    ctx.strokeStyle = rgba(th.accent, 0.08);
+    ctx.lineWidth = 1.5;
+    const horizon = 1380, vpX = CX;
+    for (let i = -10; i <= 10; i++) {
+      ctx.beginPath();
+      ctx.moveTo(vpX + i * 30, horizon);
+      ctx.lineTo(vpX + i * 260, H + 40);
+      ctx.stroke();
+    }
+    const scroll = (t * 0.35) % 1;
+    for (let j = 0; j < 9; j++) {
+      const z = (j + scroll) / 9;
+      const y = horizon + Math.pow(z, 2.2) * (H - horizon + 60);
+      ctx.globalAlpha = z;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawDust(t, th) {
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of DUST) {
+      const y = ((p.y - t * p.sp) % H + H) % H;
+      const x = p.x + Math.sin(t * 0.8 + p.ph) * p.sw;
+      const tw = 0.35 + 0.65 * Math.abs(Math.sin(t * p.tw + p.ph));
+      const a = (0.15 + p.depth * 0.55) * tw;
+      ctx.fillStyle = p.depth > 0.75 ? rgba([255, 255, 255], a) : rgba(th.accent, a);
+      ctx.beginPath();
+      ctx.arc(x, y, p.sz * (0.6 + p.depth), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function drawImpactFx(t, th) {
+    ctx.globalCompositeOperation = 'lighter';
+    IMPACTS.forEach((im, k) => {
+      const d = t - im.t;
+      if (d < 0 || d > 1.8) return;
+      // Gelombang kejut
+      if (im.ring && d < 1.0) {
+        const e = ease.outCubic(d / 1.0);
+        for (let r = 0; r < 2; r++) {
+          const rad = lerp(60, 980, clamp(e - r * 0.12, 0, 1));
+          ctx.strokeStyle = rgba(r ? [255, 255, 255] : th.accent, (1 - e) * (r ? 0.35 : 0.7));
+          ctx.lineWidth = lerp(26, 1, e);
+          ctx.beginPath();
+          ctx.arc(CX, CY, rad, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      // Ledakan partikel
+      for (const b of BURSTS[k]) {
+        const life = d / b.life;
+        if (life >= 1) continue;
+        const dist = b.spd * ease.outExpo(clamp(d / 1.2)) * 0.75;
+        const x = CX + Math.cos(b.ang) * dist, y = CY + Math.sin(b.ang) * dist;
+        const a = (1 - life) * 0.9;
+        if (b.streak) {
+          const len = 40 + (1 - life) * 110;
+          ctx.strokeStyle = rgba(th.accent, a);
+          ctx.lineWidth = b.sz * 0.6;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x - Math.cos(b.ang) * len, y - Math.sin(b.ang) * len);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = rgba([255, 240, 220], a);
+          ctx.beginPath();
+          ctx.arc(x, y, b.sz * (1 - life * 0.5), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    });
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function drawLines(t) {
+    for (const ln of LINES) {
+      if (t < ln.in || t > ln.out + 0.5) continue;
+      const pin = ease.outExpo(clamp((t - ln.in) / 0.8));
+      const pout = ease.inCubic(clamp((t - ln.out) / 0.4));
+      const w = ln.w * pin * (1 - pout);
+      if (w < 1) continue;
+      const col = ln.c === 'gold' ? [255, 197, 61] : [255, 46, 77];
+      const g = ctx.createLinearGradient(CX - w / 2, 0, CX + w / 2, 0);
+      g.addColorStop(0, rgba(col, 0));
+      g.addColorStop(0.5, rgba(col, 0.95));
+      g.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(CX - w / 2, ln.y - 2, w, 4);
+      // titik cahaya di tengah
+      ctx.globalCompositeOperation = 'lighter';
+      const rg = ctx.createRadialGradient(CX, ln.y, 0, CX, ln.y, 40);
+      rg.addColorStop(0, rgba(col, 0.6 * (1 - pout)));
+      rg.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = rg;
+      ctx.fillRect(CX - 40, ln.y - 40, 80, 80);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  const GLOW = { gold: 'rgba(255,170,30,0.85)', red: 'rgba(255,30,70,0.9)', white: 'rgba(255,255,255,0.6)' };
+
+  function drawText(el, t) {
+    if (t < el.in || t > el.end) return;
+    const n = el.letters.length;
+    const fsize = el.fsize;
+    ctx.font = `${fsize}px ${HEAD}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i < n; i++) {
+      const l = el.letters[i];
+      if (l.ch === ' ') continue;
+      const pIn = clamp((t - el.in - i * el.stagger) / el.dur);
+      if (pIn <= 0) continue;
+      const pOut = clamp((t - el.out - i * el.stagger * 0.4) / el.outDur);
+      const s = { tx: 0, ty: 0, sc: 1, sx: 1, rot: 0, a: 1, blur: 0 };
+      IN[el.anim](s, pIn, i, n);
+      if (pOut > 0) OUT[el.outAnim](s, pOut, i, n);
+      if (s.a <= 0.004) continue;
+
+      ctx.save();
+      ctx.translate(CX + l.cx + s.tx, el.y + s.ty);
+      ctx.rotate(s.rot);
+      ctx.scale(s.sc * s.sx, s.sc);
+      if (FILTER_OK) {
+        ctx.filter = s.blur > 0.5 ? `blur(${s.blur.toFixed(1)}px)` : 'none';
+        ctx.globalAlpha = s.a;
+      } else {
+        ctx.globalAlpha = s.a * clamp(1 - s.blur / 40);
+      }
+
+      const g = ctx.createLinearGradient(0, -fsize * 0.45, 0, fsize * 0.45);
+      g.addColorStop(0, el.fill[0]);
+      g.addColorStop(0.55, el.fill[1]);
+      g.addColorStop(1, el.fill[2]);
+
+      // Lapisan glow
+      if (el.glow) {
+        ctx.shadowColor = GLOW[el.glow];
+        ctx.shadowBlur = fsize * 0.22;
+      }
+      ctx.fillStyle = g;
+      ctx.fillText(l.ch, 0, 0);
+
+      // Kilap (shine) yang menyapu huruf setelah masuk
+      const shineT = (t - el.in - 0.5 - i * 0.04) / 0.5;
+      if (shineT > 0 && shineT < 1 && el.glow) {
+        ctx.shadowBlur = 0;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = s.a * Math.sin(shineT * Math.PI) * 0.55;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(l.ch, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      ctx.restore();
+    }
+    if (FILTER_OK) ctx.filter = 'none';
+  }
+
+  function drawTransitions(t, th) {
+    for (const tr of TRANSITIONS) {
+      const d = t - tr;
+      if (d < -0.25 || d > 0.55) continue;
+      // Light sweep diagonal
+      const p = clamp((d + 0.25) / 0.6);
+      const x = lerp(-W * 0.8, W * 1.8, ease.inOutCubic(p));
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.translate(x, CY);
+      ctx.rotate(0.35);
+      const g = ctx.createLinearGradient(-260, 0, 260, 0);
+      g.addColorStop(0, rgba(th.accent, 0));
+      g.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+      g.addColorStop(1, rgba(th.accent, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(-260, -1500, 520, 3000);
+      ctx.restore();
+      // Flash
+      if (d > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${0.42 * Math.exp(-d * 10)})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+    // Flash kecil di setiap impact
+    for (const im of IMPACTS) {
+      const d = t - im.t;
+      if (d < 0 || d > 0.4) continue;
+      ctx.fillStyle = rgba(th.accent, 0.28 * Math.exp(-d * 12) * (im.amp / 40));
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function drawPost(t, frame) {
+    // Chromatic fringe tipis di tepi via vignette berwarna
+    const vg = ctx.createRadialGradient(CX, CY, H * 0.28, CX, CY, H * 0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.82)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Grain
+    ctx.save();
+    ctx.globalAlpha = 0.07;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = GRAIN[frame % GRAIN.length];
+    ctx.translate((frame * 37) % 256, (frame * 91) % 256);
+    ctx.fillRect(-256, -256, W + 512, H + 512);
+    ctx.restore();
+
+    // Letterbox sinematik tipis
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, 34);
+    ctx.fillRect(0, H - 34, W, 34);
+
+    // Fade in di awal & fade out di akhir
+    const fade = Math.max(1 - smooth(0, 0.45, t), smooth(14.45, 15, t));
+    if (fade > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${fade})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function render(t) {
+    t = clamp(t, 0, DURATION);
+    const frame = Math.floor(t * 30);
+    const th = theme(t);
+    const cam = camera(t);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Latar sedikit di-parallax (bergerak lebih pelan dari teks)
+    ctx.save();
+    ctx.translate(CX + cam.sx * 0.3, CY + cam.sy * 0.3);
+    ctx.scale(1 + (cam.zoom - 1) * 0.4, 1 + (cam.zoom - 1) * 0.4);
+    ctx.translate(-CX, -CY);
+    drawBackground(t, th);
+    drawDust(t, th);
+    ctx.restore();
+
+    // Lapisan utama mengikuti kamera
+    ctx.save();
+    ctx.translate(CX + cam.sx, CY + cam.sy);
+    ctx.rotate(cam.rot);
+    ctx.scale(cam.zoom, cam.zoom);
+    ctx.translate(-CX, -CY);
+    drawImpactFx(t, th);
+    drawLines(t);
+    for (const el of TEXT) drawText(el, t);
+    ctx.restore();
+
+    drawTransitions(t, th);
+    drawPost(t, frame);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Player: Play / Pause / Replay / Seek / Rekam
+  // ---------------------------------------------------------------------------
+  const stage = document.getElementById('stage');
+  const btnPlay = document.getElementById('play');
+  const btnReplay = document.getElementById('replay');
+  const btnRec = document.getElementById('rec');
+  const seek = document.getElementById('seek');
+  const timeEl = document.getElementById('time');
+  const toastEl = document.getElementById('toast');
+
+  let current = 0, playing = false, lastTs = 0, recorder = null, idleTimer = 0;
+
+  const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg><span>PLAY</span>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg><span>PAUSE</span>';
+
+  function toast(msg, ms = 2600) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove('show'), ms);
+  }
+  function syncUI() {
+    btnPlay.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+    btnPlay.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    seek.value = current.toFixed(2);
+    seek.style.setProperty('--p', (current / DURATION * 100) + '%');
+    timeEl.textContent = `${current.toFixed(2)} / ${DURATION.toFixed(2)}`;
+  }
+  function play() {
+    if (current >= DURATION) current = 0;
+    playing = true; lastTs = 0; syncUI(); poke();
+  }
+  function pause() { playing = false; syncUI(); poke(); }
+  function replay() { current = 0; render(0); play(); }
+
+  function loop(ts) {
+    if (playing) {
+      if (lastTs) current += Math.min(0.1, (ts - lastTs) / 1000);
+      lastTs = ts;
+      if (current >= DURATION) {
+        current = DURATION; playing = false;
+        if (recorder && recorder.state === 'recording') recorder.stop();
+        stage.classList.remove('idle');
+      }
+      render(current);
+      syncUI();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // Kontrol otomatis tersembunyi saat video berjalan agar tampilan bersih
+  function poke() {
+    stage.classList.remove('idle');
+    clearTimeout(idleTimer);
+    if (playing) idleTimer = setTimeout(() => stage.classList.add('idle'), 2200);
+  }
+  ['pointermove', 'pointerdown', 'touchstart'].forEach(ev => stage.addEventListener(ev, poke, { passive: true }));
+
+  btnPlay.addEventListener('click', () => (playing ? pause() : play()));
+  btnReplay.addEventListener('click', replay);
+  canvas.addEventListener('click', () => (playing ? pause() : play()));
+  seek.addEventListener('input', () => {
+    current = parseFloat(seek.value);
+    render(current);
+    syncUI();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); playing ? pause() : play(); }
+    else if (e.key === 'r' || e.key === 'R') replay();
+    else if (e.key === 'ArrowRight') { current = clamp(current + 0.5, 0, DURATION); render(current); syncUI(); }
+    else if (e.key === 'ArrowLeft') { current = clamp(current - 0.5, 0, DURATION); render(current); syncUI(); }
+  });
+
+  // Rekam langsung di browser (MediaRecorder). MP4 jika browser mendukung, selain itu WebM.
+  function pickMime() {
+    const list = [
+      'video/mp4;codecs=avc1.640028',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+    ];
+    return list.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+  }
+  btnRec.addEventListener('click', () => {
+    if (recorder && recorder.state === 'recording') {
+      recorder.stop(); pause(); return;
+    }
+    if (!window.MediaRecorder || !canvas.captureStream) {
+      toast('Browser ini tidak mendukung perekaman. Gunakan Chrome/Edge desktop atau render.mjs.', 4000);
+      return;
+    }
+    const mime = pickMime();
+    const stream = canvas.captureStream(60);
+    const chunks = [];
+    recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 16_000_000 });
+    recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach(tr => tr.stop());
+      btnRec.classList.remove('recording');
+      btnRec.querySelector('span').textContent = 'REKAM';
+      const isMp4 = mime.startsWith('video/mp4');
+      const blob = new Blob(chunks, { type: isMp4 ? 'video/mp4' : 'video/webm' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `mulai-dari-nol.${isMp4 ? 'mp4' : 'webm'}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      toast(isMp4 ? 'Selesai! File MP4 diunduh.' : 'Selesai! File WebM diunduh — konversi ke MP4 dengan ffmpeg.', 4000);
+      recorder = null;
+    };
+    btnRec.classList.add('recording');
+    btnRec.querySelector('span').textContent = 'STOP';
+    toast('Merekam 15 detik… biarkan tab ini tetap aktif.');
+    current = 0; render(0);
+    recorder.start(250);
+    play();
+  });
+
+  // API untuk render frame-by-frame (dipakai render.mjs)
+  window.__DURATION = DURATION;
+  window.__seek = t => { render(t); return true; };
+
+  // ---------------------------------------------------------------------------
+  // Start setelah font siap (dengan batas waktu agar tetap jalan saat offline)
+  // ---------------------------------------------------------------------------
+  const fontsReady = Promise.race([
+    Promise.all([
+      document.fonts.load(`300px Anton`),
+      document.fonts.load(`900 40px Inter`),
+    ]).then(() => document.fonts.ready),
+    new Promise(r => setTimeout(r, 3500)),
+  ]).catch(() => {});
+
+  window.__ready = fontsReady.then(() => {
+    layout();
+    render(0);
+    document.getElementById('loader').classList.add('hide');
+    syncUI();
+    if (!RENDER_MODE) {
+      requestAnimationFrame(loop);
+      if (!params.has('paused')) play();
+    }
+    return true;
+  });
+})();
+</script>
+</body>
+</html>
